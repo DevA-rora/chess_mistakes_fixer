@@ -31,6 +31,16 @@
     position: relative;
     z-index: 1;
   }
+
+  /* Clerk portals are direct body children — lift them above
+     the sidebar wrapper (z-index 1 → inner fixed sidebar z-10)
+     so the UserButton popover isn't trapped underneath. */
+  .dark body > [id^="clerk-"],
+  body:is(.dark *) > [id^="clerk-"],
+  .dark body > .cl-rootBox,
+  body:is(.dark *) > .cl-rootBox {
+    z-index: 9999 !important;
+  }
 }
 
 :root {
@@ -129,12 +139,22 @@
 
 .dark [data-sidebar="sidebar"] {
   backdrop-filter: blur(12px);
+  z-index: 10;
 }
 
 .dark header {
   backdrop-filter: blur(12px);
   background: oklch(0.220 0.008 70 / 0.6);
 }
+
+/* Ensure popovers and dialogs appear above the sidebar blur */
+[role="dialog"],
+[role="tooltip"],
+[data-popover] {
+  z-index: 50 !important;
+}
+
+
 
 /* 3D push-down button animation (Duolingo / Brilliant style) */
 [data-slot="button"] {

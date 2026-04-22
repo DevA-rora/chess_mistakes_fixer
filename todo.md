@@ -1,6 +1,6 @@
 # Doing
 - [ ] Setup Clerk
-- [ ] Setup backend w/
+- [ ] Setup backend w/supabase.
 
 
 # Todo
@@ -25,3 +25,5 @@
 # for later:
 - [ ] Include pricing (shadCNblocks component, have it work with Clerk)
 - [ ] Include themes in the profile section (TweakCN themes, more wood textures, ect) (for paid users)
+
+name: "repertoire"
