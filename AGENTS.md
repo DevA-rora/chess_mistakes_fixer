@@ -67,6 +67,42 @@ We use **GitHub Flow** — trunk-based, no long-lived `develop` branch.
 - Squash-merge into `main` and delete the branch on merge.
 - Rebase or merge `main` into a long-running branch before opening the PR to keep history linear.
 
+### Agent checklist — read this BEFORE editing any file
+
+If you are an AI agent (Cursor, Claude, Copilot, Codex, etc.) working in this repo, **the very first thing you do in any non-readonly task** is check what branch you're on and make sure you're not about to commit to `main`.
+
+1. **Check the current branch.** Run `git branch --show-current` (or `git status -sb`).
+2. **If the current branch is `main`** — STOP. Do not edit files yet.
+   - Run `git fetch origin && git status -sb` to confirm `main` is up to date with `origin/main`. If it is behind, `git pull --ff-only` first.
+   - Decide which existing branch fits the task (see "Finding an existing branch" below).
+   - If none fits, create a new one: `git checkout -b <type>/<short-kebab> main` using the `feat/`, `fix/`, `chore/`, or `docs/` prefix from above.
+   - Only **after** you are on a topic branch should you start editing files.
+3. **If the current branch is already a topic branch** — confirm the task you're about to do matches the branch's purpose (its name + recent commits). If it doesn't match, create a separate new branch off `main` for the new task instead of piling unrelated work onto the current one.
+4. **Never use `git commit` or `git push` while on `main`.** No exceptions. Even one-line typo fixes go through a branch + PR.
+5. **When a task is finished**: push the branch (`git push -u origin HEAD`), open a PR with `gh pr create --base main`, and squash-merge with `gh pr merge --squash --delete-branch` once you're satisfied. Then `git checkout main && git pull`.
+
+#### Finding an existing branch
+
+Before creating a new branch, check whether one already exists for this work:
+
+- `git branch -a` lists local and remote branches.
+- `gh pr list --state open` lists open PRs and their branches.
+- The "Roadmap branch list" below names the canonical branch for each planned todo item — use those exact names when you start that work.
+
+If an existing branch matches your task and is not yet merged, check it out (`git checkout <name>` or `git checkout -t origin/<name>` for a remote-only branch) and continue on it rather than creating a duplicate.
+
+#### Worked example
+
+User asks: "Add hover tooltips to the move-rating graph."
+
+```sh
+git branch --show-current        # outputs: main → STOP, must branch first
+git fetch origin
+git status -sb                   # confirm clean and up-to-date
+git checkout -b feat/move-graph-hover main   # canonical name from roadmap
+# ... now make edits, commit, push, PR, squash-merge ...
+```
+
 ### Roadmap branch list
 
 Created on-demand when work starts (not pre-created — empty placeholder branches become stale clutter).
