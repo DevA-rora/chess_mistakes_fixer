@@ -7,6 +7,7 @@
 
 import { fork, type ChildProcess } from "child_process";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export interface PositionEval {
   /** Centipawns from the side-to-move's perspective */
@@ -48,8 +49,8 @@ export async function createEngine(): Promise<StockfishEngine> {
 }
 
 async function initEngineInternal(): Promise<StockfishEngine> {
-  // Resolve to the plain JS worker file (not bundled by Turbopack)
-  const workerPath = path.resolve(process.cwd(), "src/lib/stockfish-worker.js");
+  const workerPath = "./stockfish-worker.js";
+  const workerCwd = path.dirname(fileURLToPath(import.meta.url));
 
   let child: ChildProcess | null = null;
   let requestId = 0;
@@ -58,6 +59,7 @@ async function initEngineInternal(): Promise<StockfishEngine> {
   function spawnChild(): Promise<void> {
     return new Promise((resolve, reject) => {
       child = fork(workerPath, [], {
+        cwd: workerCwd,
         // Clean Node.js flags — Turbopack's execArgv corrupts WASM loading
         execArgv: [],
         stdio: ["ignore", "inherit", "inherit", "ipc"],
