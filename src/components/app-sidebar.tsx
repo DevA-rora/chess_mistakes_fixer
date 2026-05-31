@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth, UserButton } from "@clerk/nextjs";
@@ -15,7 +15,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Home, Gamepad2, BookOpen, GraduationCap, User, Flame } from "lucide-react";
@@ -30,61 +29,6 @@ const navItems = [
   { title: "Practice", href: "/drill", icon: GraduationCap },
   { title: "Profile", href: "/profile", icon: User },
 ];
-
-function UserButtonWithSidebarControl() {
-  const { setOpen } = useSidebar();
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    
-    let observer: MutationObserver | null = null;
-    
-    const setupObserver = () => {
-      const button = ref.current?.querySelector('button');
-      if (button) {
-        observer = new MutationObserver((mutations) => {
-          for (const mutation of mutations) {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {
-              const isExpanded = button.getAttribute('aria-expanded') === 'true';
-              if (isExpanded) {
-                setOpen(false);
-              } else {
-                setOpen(true);
-              }
-            }
-          }
-        });
-        observer.observe(button, { attributes: true, attributeFilter: ['aria-expanded'] });
-        return true;
-      }
-      return false;
-    };
-
-    if (!setupObserver()) {
-      const containerObserver = new MutationObserver(() => {
-        if (setupObserver()) {
-          containerObserver.disconnect();
-        }
-      });
-      containerObserver.observe(ref.current, { childList: true, subtree: true });
-      return () => {
-        containerObserver.disconnect();
-        if (observer) observer.disconnect();
-      };
-    }
-
-    return () => {
-      if (observer) observer.disconnect();
-    };
-  }, [setOpen]);
-
-  return (
-    <div ref={ref}>
-      <UserButton />
-    </div>
-  );
-}
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -158,7 +102,7 @@ export function AppSidebar() {
         <SidebarFooter className="p-4">
           {isSignedIn ? (
             <div className="flex items-center gap-4 justify-between w-full">
-              <UserButtonWithSidebarControl />
+              <UserButton />
               <StreakDisplay />
             </div>
           ) : (
@@ -186,4 +130,3 @@ export function AppSidebar() {
     </>
   );
 }
-

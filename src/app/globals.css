@@ -32,13 +32,18 @@
     z-index: 1;
   }
 
-  /* Clerk portals are direct body children — lift them above
-     the sidebar wrapper (z-index 1 → inner fixed sidebar z-10)
-     so the UserButton popover isn't trapped underneath. */
+  /* Clerk portals are direct body children — lift them above the sidebar.
+     We pin Clerk UI versions in ClerkProvider via @clerk/ui.
+     The UserButton popover is mounted via @floating-ui/react's FloatingPortal,
+     which appends a plain [data-floating-ui-portal] wrapper to <body> with the
+     .cl-rootBox nested inside; that wrapper (not .cl-rootBox) is what gets
+     trapped at z-index:1 by the rule above, so it must be lifted directly. */
   .dark body > [id^="clerk-"],
   body:is(.dark *) > [id^="clerk-"],
   .dark body > .cl-rootBox,
-  body:is(.dark *) > .cl-rootBox {
+  body:is(.dark *) > .cl-rootBox,
+  .dark body > [data-floating-ui-portal],
+  body:is(.dark *) > [data-floating-ui-portal] {
     z-index: 9999 !important;
   }
 }
@@ -137,9 +142,15 @@
   --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
 }
 
-.dark [data-sidebar="sidebar"] {
+.dark [data-slot="sidebar-inner"] {
   backdrop-filter: blur(12px);
   z-index: 10;
+}
+
+/* Mobile sidebar sheet content also needs blur, but must keep its own z-index.
+   Targeting [data-sidebar="sidebar"] globally overrides SheetContent's z-50. */
+.dark [data-slot="sheet-content"][data-sidebar="sidebar"] {
+  backdrop-filter: blur(12px);
 }
 
 .dark header {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Merriweather, Source_Serif_4, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ui } from "@clerk/ui";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -36,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider ui={ui}>
       <html
         lang="en"
         className={`${merriweather.variable} ${sourceSerif.variable} ${jetbrainsMono.variable} dark h-full antialiased`}

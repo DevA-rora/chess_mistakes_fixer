@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.3",
+    "@clerk/ui": "^1.6.7",
     "@google/genai": "^1.49.0",
     "@hiseb/confetti": "^2.1.0",
     "@lottiefiles/dotlottie-react": "^0.18.10",
