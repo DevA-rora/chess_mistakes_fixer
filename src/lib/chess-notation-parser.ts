@@ -57,7 +57,7 @@ function tryPlayLine(
 ): [string[], string] | null {
   for (const fen of fens) {
     try {
-      const chess = new Chess(fen);
+      const chess: InstanceType<typeof Chess> = new Chess(fen);
       const results: string[] = [];
       let ok = true;
       for (const token of tokens) {
@@ -90,7 +90,7 @@ function destinationSquare(san: string): string | null {
  */
 function resolveFromSquare(san: string, fen: string): string | null {
   try {
-    const chess = new Chess(fen);
+    const chess: InstanceType<typeof Chess> = new Chess(fen);
     const result = chess.move(cleanToken(san));
     return result ? result.from : null;
   } catch {
@@ -172,7 +172,7 @@ function parseInlineRefs(text: string, fens: string[]): Segment[] {
         iv.seg = { ...iv.seg, fromSquare: from };
         // Advance the running FEN so subsequent moves can resolve
         try {
-          const chess = new Chess(usedFen);
+          const chess: InstanceType<typeof Chess> = new Chess(usedFen);
           chess.move(cleanToken(san));
           runningFen = chess.fen();
         } catch {
