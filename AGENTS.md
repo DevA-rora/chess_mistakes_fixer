@@ -56,10 +56,32 @@ src/
 - **Component pattern**: Page files contain all page-specific logic inline; extract to `src/components/` when reused
 - **Dark theme only** — no light mode toggle; wood texture background via CSS
 
+## Branching & PRs
+
+We use **GitHub Flow** — trunk-based, no long-lived `develop` branch.
+
+- `main` is always deployable. No direct pushes; everything lands via PR.
+- Branch names: `feat/<kebab>` (new feature), `fix/<kebab>` (bug fix), `chore/<kebab>` (tooling, deps, refactor with no behavior change), `docs/<kebab>` (docs / todo / readme only).
+- One topic per branch. Short-lived — open the PR the same day if possible.
+- PR title is an imperative summary (e.g. "Adopt @clerk/ui and drop UserButton MutationObserver hack").
+- Squash-merge into `main` and delete the branch on merge.
+- Rebase or merge `main` into a long-running branch before opening the PR to keep history linear.
+
+### Roadmap branch list
+
+Created on-demand when work starts (not pre-created — empty placeholder branches become stale clutter).
+
+- **Backend / infra**: `feat/supabase-backend`, `chore/github-workflow`, `chore/vercel-deploy`
+- **AI coach**: `fix/ai-coach-lines`, `fix/ai-coach-hallucinations`
+- **Review & board UX**: `feat/move-graph-hover`, `feat/play-button-autoadvance`, `fix/chessboard-resize-splitscreen`, `feat/sound-effects`
+- **Analysis & profile**: `feat/accuracy-elo-calibration`, `feat/user-statistics`, `feat/user-data-fields`
+- **Monetization (later)**: `feat/pricing-clerk-billing`, `feat/profile-themes`
+
 ## Roadmap
 
 See `todo.md` for the full task list. Key upcoming work:
-- Chess.com / Lichess API integration for game syncing
-- Stockfish engine integration for position analysis
-- Gemini API for AI coach explanations
-- Real database to replace `mock-data.ts`
+- Supabase backend to replace `mock-data.ts`
+- AI coach fixes (line rendering, move hallucination)
+- Game-review polish (hover tooltips on move graph + eval bar, play-button auto-advance)
+- Accuracy / estimated-ELO calibration against Chess.com
+- Vercel deployment + GitHub Actions CI
