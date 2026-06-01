@@ -14,6 +14,7 @@ import type { CardStatus, Flashcard, MistakeType } from "@/lib/mock-data";
 import type { CardOperation } from "@/lib/card-manager";
 import { useFlashcardsStore } from "@/hooks/use-flashcards-store";
 import { useGamesStore } from "@/hooks/use-games-store";
+import { RequireAuth } from "@/components/require-auth";
 
 type ChatMessage = { role: "user" | "ai"; content: string };
 
@@ -25,6 +26,14 @@ const statuses: CardStatus[] = ["new", "learning", "review", "mastered"];
 const mistakeTypes: MistakeType[] = ["blunder", "mistake", "inaccuracy"];
 
 export default function DecksPage() {
+  return (
+    <RequireAuth title="Sign in to see your decks" description="Your flashcard decks live in your account.">
+      <DecksPageContent />
+    </RequireAuth>
+  );
+}
+
+function DecksPageContent() {
   const {
     flashcards,
     createFlashcard,

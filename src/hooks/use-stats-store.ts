@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { SRSRating, Flashcard, Game } from "@/lib/mock-data";
-
-const STORAGE_KEY = "chess-fixer-stats";
+import { useCallback, useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import type { SRSRating } from "@/lib/mock-data";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useDataRevision } from "@/lib/supabase/data-revision";
+import {
+  bulkUpsertDailyActivity,
+  getCardReviewTotals,
+  listDailyActivity,
+  recordCardReview as recordCardReviewRepo,
+  recordGameAnalyzed as recordGameAnalyzedRepo,
+  recordGameReviewComplete as recordGameReviewCompleteRepo,
+  type CardReviewTotals,
+} from "@/lib/repositories/stats";
 
 export interface DailyActivity {
   cardsReviewed: number;
@@ -16,10 +26,7 @@ export interface DailyActivity {
 
 interface StatsData {
   dailyActivity: Record<string, DailyActivity>;
-  totalReviews: number;
-  totalCorrect: number;
-  ratingBreakdown: { again: number; hard: number; good: number; easy: number };
-  backfilled: boolean;
+  totals: CardReviewTotals;
 }
 
 const EMPTY_DAY: DailyActivity = {
@@ -33,55 +40,70 @@ const EMPTY_DAY: DailyActivity = {
 
 const DEFAULT_DATA: StatsData = {
   dailyActivity: {},
-  totalReviews: 0,
-  totalCorrect: 0,
-  ratingBreakdown: { again: 0, hard: 0, good: 0, easy: 0 },
-  backfilled: false,
+  totals: {
+    totalReviews: 0,
+    totalCorrect: 0,
+    ratingBreakdown: { again: 0, hard: 0, good: 0, easy: 0 },
+  },
 };
 
-function getToday(): string {
+function todayKey(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function loadStats(): StatsData {
-  if (typeof window === "undefined") return DEFAULT_DATA;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as StatsData;
-      if (parsed && typeof parsed.totalReviews === "number") return parsed;
-    }
-  } catch {
-    // corrupted
-  }
-  return DEFAULT_DATA;
-}
-
 export function useStatsStore() {
+  const { user, isLoaded } = useUser();
+  const userId = user?.id ?? null;
+  const revision = useDataRevision();
+
   const [data, setData] = useState<StatsData>(DEFAULT_DATA);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setData(loadStats());
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // storage full
+    if (!isLoaded) return;
+    if (!userId) {
+      setData(DEFAULT_DATA);
+      setHydrated(true);
+      return;
     }
-  }, [data, hydrated]);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const client = getSupabaseBrowserClient();
+        const [dailyActivity, totals] = await Promise.all([
+          listDailyActivity(client),
+          getCardReviewTotals(client),
+        ]);
+        if (!cancelled) {
+          setData({ dailyActivity, totals });
+          setHydrated(true);
+        }
+      } catch (err) {
+        console.error("[useStatsStore] failed to load stats", err);
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, userId, revision]);
 
   const recordCardReview = useCallback(
-    (rating: SRSRating, correct: boolean, timeMs: number, mastered: boolean) => {
+    (
+      rating: SRSRating,
+      correct: boolean,
+      timeMs: number,
+      mastered: boolean,
+      flashcardId?: string
+    ) => {
+      if (!userId) return;
+
+      const today = todayKey();
       setData((prev) => {
-        const today = getToday();
         const day = prev.dailyActivity[today] ?? { ...EMPTY_DAY };
         return {
-          ...prev,
           dailyActivity: {
             ...prev.dailyActivity,
             [today]: {
@@ -92,64 +114,93 @@ export function useStatsStore() {
               drillTimeMs: day.drillTimeMs + timeMs,
             },
           },
-          totalReviews: prev.totalReviews + 1,
-          totalCorrect: prev.totalCorrect + (correct ? 1 : 0),
-          ratingBreakdown: {
-            ...prev.ratingBreakdown,
-            [rating]: prev.ratingBreakdown[rating] + 1,
+          totals: {
+            totalReviews: prev.totals.totalReviews + 1,
+            totalCorrect: prev.totals.totalCorrect + (correct ? 1 : 0),
+            ratingBreakdown: {
+              ...prev.totals.ratingBreakdown,
+              [rating]: prev.totals.ratingBreakdown[rating] + 1,
+            },
           },
         };
       });
+
+      if (!flashcardId) {
+        console.warn(
+          "[useStatsStore] recordCardReview called without flashcardId; review log not persisted"
+        );
+        return;
+      }
+
+      (async () => {
+        try {
+          await recordCardReviewRepo(
+            getSupabaseBrowserClient(),
+            userId,
+            flashcardId,
+            rating,
+            correct,
+            timeMs,
+            mastered
+          );
+        } catch (err) {
+          console.error("[useStatsStore] recordCardReview failed", err);
+        }
+      })();
     },
-    []
+    [userId]
   );
 
   const recordGameAnalyzed = useCallback(() => {
+    if (!userId) return;
+    const today = todayKey();
     setData((prev) => {
-      const today = getToday();
       const day = prev.dailyActivity[today] ?? { ...EMPTY_DAY };
       return {
         ...prev,
         dailyActivity: {
           ...prev.dailyActivity,
-          [today]: {
-            ...day,
-            gamesAnalyzed: day.gamesAnalyzed + 1,
-          },
+          [today]: { ...day, gamesAnalyzed: day.gamesAnalyzed + 1 },
         },
       };
     });
-  }, []);
+    (async () => {
+      try {
+        await recordGameAnalyzedRepo(getSupabaseBrowserClient(), userId);
+      } catch (err) {
+        console.error("[useStatsStore] recordGameAnalyzed failed", err);
+      }
+    })();
+  }, [userId]);
 
   const recordGameReviewComplete = useCallback(() => {
+    if (!userId) return;
+    const today = todayKey();
     setData((prev) => {
-      const today = getToday();
       const day = prev.dailyActivity[today] ?? { ...EMPTY_DAY };
       return {
         ...prev,
         dailyActivity: {
           ...prev.dailyActivity,
-          [today]: {
-            ...day,
-            gamesReviewed: day.gamesReviewed + 1,
-          },
+          [today]: { ...day, gamesReviewed: day.gamesReviewed + 1 },
         },
       };
     });
-  }, []);
+    (async () => {
+      try {
+        await recordGameReviewCompleteRepo(getSupabaseBrowserClient(), userId);
+      } catch (err) {
+        console.error("[useStatsStore] recordGameReviewComplete failed", err);
+      }
+    })();
+  }, [userId]);
 
+  // Kept for API parity with the previous localStorage-backed hook so
+  // existing call sites compile. Data is now authoritative in Supabase
+  // — no client-side backfill is ever needed.
   const backfillFromExistingData = useCallback(
-    (flashcards: Flashcard[], _games: Game[]) => {
-      setData((prev) => {
-        if (prev.backfilled) return prev;
-        const reviewedCards = flashcards.filter((c) => c.status !== "new");
-        return {
-          ...prev,
-          totalReviews: prev.totalReviews + reviewedCards.length,
-          totalCorrect: prev.totalCorrect + Math.round(reviewedCards.length * 0.7),
-          backfilled: true,
-        };
-      });
+    (...args: unknown[]) => {
+      void args;
     },
     []
   );
@@ -173,24 +224,40 @@ export function useStatsStore() {
   );
 
   const getAccuracy = useCallback((): number => {
-    if (data.totalReviews === 0) return 0;
-    return Math.round((data.totalCorrect / data.totalReviews) * 100);
-  }, [data.totalReviews, data.totalCorrect]);
+    if (data.totals.totalReviews === 0) return 0;
+    return Math.round((data.totals.totalCorrect / data.totals.totalReviews) * 100);
+  }, [data.totals.totalReviews, data.totals.totalCorrect]);
 
   const getTodayActivity = useCallback((): DailyActivity => {
-    return data.dailyActivity[getToday()] ?? { ...EMPTY_DAY };
+    return data.dailyActivity[todayKey()] ?? { ...EMPTY_DAY };
   }, [data.dailyActivity]);
 
   return {
     hydrated,
-    totalReviews: data.totalReviews,
-    totalCorrect: data.totalCorrect,
-    ratingBreakdown: data.ratingBreakdown,
-    backfilled: data.backfilled,
+    totalReviews: data.totals.totalReviews,
+    totalCorrect: data.totals.totalCorrect,
+    ratingBreakdown: data.totals.ratingBreakdown,
+    // Whenever signed in we already have authoritative data from Supabase.
+    backfilled: true,
     recordCardReview,
     recordGameAnalyzed,
     recordGameReviewComplete,
     backfillFromExistingData,
+    bulkUpsertDailyActivity: useCallback(
+      async (entries: Record<string, DailyActivity>) => {
+        if (!userId) return;
+        try {
+          await bulkUpsertDailyActivity(
+            getSupabaseBrowserClient(),
+            userId,
+            entries
+          );
+        } catch (err) {
+          console.error("[useStatsStore] bulkUpsertDailyActivity failed", err);
+        }
+      },
+      [userId]
+    ),
     getActivityForRange,
     getAccuracy,
     getTodayActivity,

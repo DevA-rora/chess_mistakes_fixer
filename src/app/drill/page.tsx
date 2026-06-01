@@ -17,6 +17,7 @@ import { useGamesStore } from "@/hooks/use-games-store";
 import { useFlashcardsStore } from "@/hooks/use-flashcards-store";
 import { useStreakStore } from "@/hooks/use-streak-store";
 import { useStatsStore } from "@/hooks/use-stats-store";
+import { RequireAuth } from "@/components/require-auth";
 import { useSquareHighlights } from "@/hooks/use-square-highlights";
 import { useClickToMove } from "@/hooks/use-click-to-move";
 import { styledPieces } from "@/lib/chess-pieces";
@@ -224,6 +225,14 @@ const boardStyles = {
 };
 
 export default function DrillPage() {
+  return (
+    <RequireAuth title="Sign in to practice" description="Your flashcards and review history are saved to your account.">
+      <DrillPageContent />
+    </RequireAuth>
+  );
+}
+
+function DrillPageContent() {
   const { games } = useGamesStore();
   const { getCardsDueToday, updateFlashcard } = useFlashcardsStore();
   const { recordDrillSolve } = useStreakStore();
@@ -507,7 +516,7 @@ export default function DrillPage() {
     const isCorrect = attemptResult === "correct";
     const timeMs = elapsed * 1000;
     const isMastered = interval >= 21;
-    recordCardReview(rating, isCorrect, timeMs, isMastered);
+    recordCardReview(rating, isCorrect, timeMs, isMastered, card.id);
 
     setCompleted((prev) => [...prev, card.id]);
     recordDrillSolve();

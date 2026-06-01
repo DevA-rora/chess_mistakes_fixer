@@ -3,6 +3,11 @@ import {
   normalizeChessComGame,
   type ChessComGame,
 } from "@/lib/game-sync";
+import {
+  getServerClerkUserId,
+  getSupabaseServerClient,
+} from "@/lib/supabase/server";
+import { upsertConnectedAccount } from "@/lib/repositories/accounts";
 
 const MAX_GAMES = 50;
 const USER_AGENT = "ChessMistakesFixer/1.0";
@@ -80,6 +85,24 @@ export async function POST(req: NextRequest) {
     const games = trimmed
       .map((g) => normalizeChessComGame(g, user))
       .filter((g): g is NonNullable<typeof g> => g !== null);
+
+    // Record the successful sync server-side (defense-in-depth; the
+    // client `useSettingsStore` also updates connected_accounts).
+    try {
+      const userId = await getServerClerkUserId();
+      if (userId) {
+        const supabase = await getSupabaseServerClient();
+        if (supabase) {
+          await upsertConnectedAccount(supabase, userId, {
+            provider: "chesscom",
+            username: user,
+            lastSyncAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (persistErr) {
+      console.warn("[/api/sync/chesscom] failed to record sync", persistErr);
+    }
 
     return NextResponse.json({ games, username: user });
   } catch (e) {

@@ -15,6 +15,7 @@ import { ConnectAccountModal } from "@/components/connect-account-modal";
 import { useGamesStore } from "@/hooks/use-games-store";
 import { useSettingsStore } from "@/hooks/use-settings-store";
 import { getAnalyzedGameIds } from "@/lib/analysis-cache";
+import { RequireAuth } from "@/components/require-auth";
 
 const reviewStatusConfig: Record<ReviewStatus, { label: string; icon: React.ReactNode; className: string }> = {
   reviewed: {
@@ -45,6 +46,14 @@ function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
 }
 
 export default function GamesPage() {
+  return (
+    <RequireAuth title="Sign in to see your games" description="Your imported games and analyses are saved to your account.">
+      <GamesPageContent />
+    </RequireAuth>
+  );
+}
+
+function GamesPageContent() {
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -58,8 +67,15 @@ export default function GamesPage() {
   const hasAnyAccount = !!settings.chessComUsername || !!settings.lichessUsername;
 
   useEffect(() => {
-    setAnalyzedIds(new Set(getAnalyzedGameIds()));
-  }, []);
+    let cancelled = false;
+    (async () => {
+      const ids = await getAnalyzedGameIds();
+      if (!cancelled) setAnalyzedIds(new Set(ids));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [games.length]);
 
   const syncGames = useCallback(async () => {
     if (!settings.chessComUsername && !settings.lichessUsername) return;

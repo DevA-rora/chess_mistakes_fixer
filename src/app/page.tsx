@@ -13,6 +13,7 @@ import { type ReviewStatus } from "@/lib/mock-data";
 import { useGamesStore } from "@/hooks/use-games-store";
 import { useFlashcardsStore } from "@/hooks/use-flashcards-store";
 import { useStreakStore } from "@/hooks/use-streak-store";
+import { RequireAuth } from "@/components/require-auth";
 
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -67,6 +68,14 @@ function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
 }
 
 export default function HomePage() {
+  return (
+    <RequireAuth title="Welcome to Chess Mistakes Fixer" description="Sign in to see your dashboard, games, and review queue.">
+      <HomePageContent />
+    </RequireAuth>
+  );
+}
+
+function HomePageContent() {
   const { games } = useGamesStore();
   const { getCardsDueToday, flashcards } = useFlashcardsStore();
   const { streak } = useStreakStore();

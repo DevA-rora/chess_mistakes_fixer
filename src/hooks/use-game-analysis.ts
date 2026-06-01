@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { GameAnalysis } from "@/lib/mock-data";
-import { getCachedAnalysis, saveCachedAnalysis, clearCachedAnalysis } from "@/lib/analysis-cache";
+import {
+  clearCachedAnalysis,
+  getCachedAnalysis,
+  saveCachedAnalysis,
+} from "@/lib/analysis-cache";
 
 interface UseGameAnalysisOptions {
   gameId: string;
@@ -33,13 +37,19 @@ export function useGameAnalysis({
   const [progress, setProgress] = useState("");
   const [isCached, setIsCached] = useState(false);
 
-  // Check cache on mount
   useEffect(() => {
-    const cached = getCachedAnalysis(gameId);
-    if (cached) {
-      setAnalysis(cached);
-      setIsCached(true);
-    }
+    let cancelled = false;
+    (async () => {
+      const cached = await getCachedAnalysis(gameId);
+      if (cancelled) return;
+      if (cached) {
+        setAnalysis(cached);
+        setIsCached(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [gameId]);
 
   const runAnalysis = useCallback(async () => {
@@ -61,7 +71,7 @@ export function useGameAnalysis({
       }
 
       const result: GameAnalysis = await response.json();
-      saveCachedAnalysis(result);
+      await saveCachedAnalysis(result);
       setAnalysis(result);
       setIsCached(true);
       setProgress("");
@@ -78,26 +88,23 @@ export function useGameAnalysis({
   }, [gameId, pgn, depth]);
 
   const startAnalysis = useCallback(async () => {
-    // Check cache first
-    const cached = getCachedAnalysis(gameId);
+    const cached = await getCachedAnalysis(gameId);
     if (cached) {
       setAnalysis(cached);
       setIsCached(true);
       return;
     }
-
     return runAnalysis();
   }, [gameId, runAnalysis]);
 
-  const forceReanalyze = useCallback(() => {
-    clearCachedAnalysis(gameId);
+  const forceReanalyze = useCallback(async () => {
+    await clearCachedAnalysis(gameId);
     setAnalysis(null);
     setIsCached(false);
     setError(null);
     runAnalysis();
   }, [gameId, runAnalysis]);
 
-  // Auto-analyze if requested and not cached
   useEffect(() => {
     if (autoAnalyze && !analysis && !isAnalyzing) {
       startAnalysis();

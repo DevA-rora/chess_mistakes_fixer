@@ -9,6 +9,11 @@ import type {
   AnalyzedMove,
   MoveClassification,
 } from "@/lib/mock-data";
+import {
+  getServerClerkUserId,
+  getSupabaseServerClient,
+} from "@/lib/supabase/server";
+import { saveAnalysis } from "@/lib/repositories/analyses";
 
 // Disable static prerendering for this route
 export const dynamic = "force-dynamic";
@@ -325,6 +330,21 @@ export async function POST(request: NextRequest) {
       whiteAccuracy,
       blackAccuracy,
     };
+
+    // Best-effort server-side persistence. The client also persists via
+    // saveCachedAnalysis() so a failure here does not break the response —
+    // it just means we lose the redundancy.
+    try {
+      const userId = await getServerClerkUserId();
+      if (userId) {
+        const supabase = await getSupabaseServerClient();
+        if (supabase) {
+          await saveAnalysis(supabase, analysis, userId);
+        }
+      }
+    } catch (persistErr) {
+      console.warn("[/api/analyze] server-side persistence failed", persistErr);
+    }
 
     return Response.json(analysis);
   } catch (error) {

@@ -1,20 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useDataRevision } from "@/lib/supabase/data-revision";
+import { getStreak, saveStreak, type StreakSnapshot } from "@/lib/repositories/streak";
 
-const STORAGE_KEY = "chess-fixer-streak";
-
-interface StreakData {
-  currentStreak: number;
-  bestStreak: number;
-  lastActiveDate: string | null; // ISO date string (YYYY-MM-DD)
-  todayDrillCount: number; // flashcards solved today
-  todayDrillDate: string | null; // which day the drill count is for
-  todayReviewedGame: boolean; // whether a game was reviewed today
-  todayReviewDate: string | null; // which day the review flag is for
-}
-
-const DEFAULT_DATA: StreakData = {
+const DEFAULT: StreakSnapshot = {
   currentStreak: 0,
   bestStreak: 0,
   lastActiveDate: null,
@@ -24,133 +16,143 @@ const DEFAULT_DATA: StreakData = {
   todayReviewDate: null,
 };
 
-function getToday(): string {
+function todayKey(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function loadStreak(): StreakData {
-  if (typeof window === "undefined") return DEFAULT_DATA;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as StreakData;
-      if (parsed && typeof parsed.currentStreak === "number") return parsed;
-    }
-  } catch {
-    // corrupted
-  }
-  return DEFAULT_DATA;
-}
-
-/** Check if the streak is still alive (last active was today or yesterday). */
-function isStreakAlive(data: StreakData): boolean {
-  if (!data.lastActiveDate) return false;
-  const today = new Date(getToday());
-  const last = new Date(data.lastActiveDate);
+function isStreakAlive(snapshot: StreakSnapshot): boolean {
+  if (!snapshot.lastActiveDate) return false;
+  const today = new Date(todayKey());
+  const last = new Date(snapshot.lastActiveDate);
   const diffDays = Math.floor(
     (today.getTime() - last.getTime()) / (1000 * 60 * 60 * 24)
   );
   return diffDays <= 1;
 }
 
-/** Did the user already complete a qualifying activity today? */
-function hasCompletedToday(data: StreakData): boolean {
-  const today = getToday();
-  const drillDone = data.todayDrillDate === today && data.todayDrillCount >= 3;
-  const reviewDone = data.todayReviewDate === today && data.todayReviewedGame;
+function hasCompletedToday(snapshot: StreakSnapshot): boolean {
+  const today = todayKey();
+  const drillDone =
+    snapshot.todayDrillDate === today && snapshot.todayDrillCount >= 3;
+  const reviewDone =
+    snapshot.todayReviewDate === today && snapshot.todayReviewedGame;
   return drillDone || reviewDone;
 }
 
+function bumpStreak(current: StreakSnapshot): StreakSnapshot {
+  const today = todayKey();
+  if (current.lastActiveDate === today) return current;
+  const newStreak = current.currentStreak + 1;
+  return {
+    ...current,
+    currentStreak: newStreak,
+    bestStreak: Math.max(current.bestStreak, newStreak),
+    lastActiveDate: today,
+  };
+}
+
 export function useStreakStore() {
-  const [data, setData] = useState<StreakData>(DEFAULT_DATA);
+  const { user, isLoaded } = useUser();
+  const userId = user?.id ?? null;
+  const revision = useDataRevision();
+
+  const [snapshot, setSnapshot] = useState<StreakSnapshot>(DEFAULT);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const loaded = loadStreak();
-    // Reset streak if it's broken (more than 1 day gap)
-    if (!isStreakAlive(loaded)) {
-      setData({ ...DEFAULT_DATA });
-    } else {
-      setData(loaded);
+    if (!isLoaded) return;
+    if (!userId) {
+      setSnapshot(DEFAULT);
+      setHydrated(true);
+      return;
     }
-    setHydrated(true);
-  }, []);
 
-  // Persist
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // storage full
-    }
-  }, [data, hydrated]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const client = getSupabaseBrowserClient();
+        const loaded = await getStreak(client, userId);
+        if (!cancelled) {
+          setSnapshot(isStreakAlive(loaded) ? loaded : { ...DEFAULT });
+          setHydrated(true);
+        }
+      } catch (err) {
+        console.error("[useStreakStore] failed to load streak", err);
+        if (!cancelled) setHydrated(true);
+      }
+    })();
 
-  const incrementStreak = useCallback((current: StreakData) => {
-    const today = getToday();
-    // Only increment if not already counted today
-    if (current.lastActiveDate === today) return current;
-    const newStreak = current.currentStreak + 1;
-    return {
-      ...current,
-      currentStreak: newStreak,
-      bestStreak: Math.max(current.bestStreak, newStreak),
-      lastActiveDate: today,
+    return () => {
+      cancelled = true;
     };
-  }, []);
+  }, [isLoaded, userId, revision]);
 
-  /** Call after a flashcard is solved in the drill page. */
+  const persist = useCallback(
+    (next: StreakSnapshot) => {
+      if (!userId) return;
+      (async () => {
+        try {
+          await saveStreak(getSupabaseBrowserClient(), userId, next);
+        } catch (err) {
+          console.error("[useStreakStore] saveStreak failed", err);
+        }
+      })();
+    },
+    [userId]
+  );
+
   const recordDrillSolve = useCallback(() => {
-    setData((prev) => {
-      const today = getToday();
+    if (!userId) return;
+    setSnapshot((prev) => {
+      const today = todayKey();
       const drillDate = prev.todayDrillDate === today ? prev.todayDrillDate : today;
-      const drillCount = prev.todayDrillDate === today ? prev.todayDrillCount + 1 : 1;
+      const drillCount =
+        prev.todayDrillDate === today ? prev.todayDrillCount + 1 : 1;
 
-      let updated: StreakData = {
+      let updated: StreakSnapshot = {
         ...prev,
         todayDrillCount: drillCount,
         todayDrillDate: drillDate,
       };
 
-      // If they just hit 3 and haven't been credited today, increment streak
       if (drillCount >= 3 && !hasCompletedToday(prev)) {
-        updated = incrementStreak(updated);
+        updated = bumpStreak(updated);
       }
 
+      persist(updated);
       return updated;
     });
-  }, [incrementStreak]);
+  }, [persist, userId]);
 
-  /** Call when the user completes a game review. */
   const recordGameReview = useCallback(() => {
-    setData((prev) => {
-      const today = getToday();
-
-      let updated: StreakData = {
+    if (!userId) return;
+    setSnapshot((prev) => {
+      const today = todayKey();
+      let updated: StreakSnapshot = {
         ...prev,
         todayReviewedGame: true,
         todayReviewDate: today,
       };
-
-      // If they haven't been credited today, increment streak
       if (!hasCompletedToday(prev)) {
-        updated = incrementStreak(updated);
+        updated = bumpStreak(updated);
       }
-
+      persist(updated);
       return updated;
     });
-  }, [incrementStreak]);
+  }, [persist, userId]);
 
-  const streak = isStreakAlive(data) ? data.currentStreak : 0;
-  const isActive = streak > 0 && hasCompletedToday(data);
-  const completedToday = hasCompletedToday(data);
+  const alive = isStreakAlive(snapshot);
+  const streak = alive ? snapshot.currentStreak : 0;
+  const completedToday = hasCompletedToday(snapshot);
+  const isActive = streak > 0 && completedToday;
 
   return {
     streak,
-    bestStreak: data.bestStreak,
+    bestStreak: snapshot.bestStreak,
     isActive,
     completedToday,
-    todayDrillCount: data.todayDrillDate === getToday() ? data.todayDrillCount : 0,
+    todayDrillCount:
+      snapshot.todayDrillDate === todayKey() ? snapshot.todayDrillCount : 0,
     recordDrillSolve,
     recordGameReview,
     hydrated,

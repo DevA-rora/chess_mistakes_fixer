@@ -4,6 +4,11 @@ import {
   parseNdjson,
   type LichessGame,
 } from "@/lib/game-sync";
+import {
+  getServerClerkUserId,
+  getSupabaseServerClient,
+} from "@/lib/supabase/server";
+import { upsertConnectedAccount } from "@/lib/repositories/accounts";
 
 const MAX_GAMES = 50;
 const USER_AGENT = "ChessMistakesFixer/1.0";
@@ -68,6 +73,22 @@ export async function POST(req: NextRequest) {
     const games = apiGames
       .map((g) => normalizeLichessGame(g, user))
       .filter((g): g is NonNullable<typeof g> => g !== null);
+
+    try {
+      const userId = await getServerClerkUserId();
+      if (userId) {
+        const supabase = await getSupabaseServerClient();
+        if (supabase) {
+          await upsertConnectedAccount(supabase, userId, {
+            provider: "lichess",
+            username: user,
+            lastSyncAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (persistErr) {
+      console.warn("[/api/sync/lichess] failed to record sync", persistErr);
+    }
 
     return NextResponse.json({ games, username: user });
   } catch (e) {
