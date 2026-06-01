@@ -13,6 +13,7 @@ import { useFlashcardsStore } from "@/hooks/use-flashcards-store";
 import { useGamesStore } from "@/hooks/use-games-store";
 import { useStatsStore } from "@/hooks/use-stats-store";
 import { ConnectAccountModal } from "@/components/connect-account-modal";
+import { RequireAuth } from "@/components/require-auth";
 
 function StreakCounter({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -183,6 +184,14 @@ function LichessIcon({ className }: { className?: string }) {
 }
 
 export default function ProfilePage() {
+  return (
+    <RequireAuth title="Sign in to see your profile" description="Your stats and connected accounts live in your account.">
+      <ProfilePageContent />
+    </RequireAuth>
+  );
+}
+
+function ProfilePageContent() {
   const { settings, updateSettings } = useSettingsStore();
   const { streak, bestStreak } = useStreakStore();
   const { flashcards } = useFlashcardsStore();

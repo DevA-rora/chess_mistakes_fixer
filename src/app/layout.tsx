@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
+import { MigrationRunner } from "@/components/migration-runner";
 import "./globals.css";
 
 const merriweather = Merriweather({
@@ -43,6 +44,7 @@ export default function RootLayout({
         className={`${merriweather.variable} ${sourceSerif.variable} ${jetbrainsMono.variable} dark h-full antialiased`}
       >
         <body className="min-h-full flex flex-col font-sans">
+          <MigrationRunner />
           <div className="app-shell contents">
             <TooltipProvider>
               <SidebarProvider>

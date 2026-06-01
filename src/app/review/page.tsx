@@ -43,6 +43,7 @@ import { useStatsStore } from "@/hooks/use-stats-store";
 import { styledPieces } from "@/lib/chess-pieces";
 import { useGameAnalysis } from "@/hooks/use-game-analysis";
 import { useSettingsStore } from "@/hooks/use-settings-store";
+import { RequireAuth } from "@/components/require-auth";
 import { useSquareHighlights } from "@/hooks/use-square-highlights";
 import { useClickToMove } from "@/hooks/use-click-to-move";
 import { generateFlashcards } from "@/lib/generate-flashcards";
@@ -364,9 +365,11 @@ function PlayerBar({ name, rating, time, isTop }: { name: string; rating: number
 // --- Main Page ---
 export default function ReviewPage() {
   return (
-    <Suspense fallback={<div className="flex h-[calc(100vh-48px)] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
-      <ReviewPageContent />
-    </Suspense>
+    <RequireAuth title="Sign in to review games" description="Game analyses and AI coach chats are saved to your account.">
+      <Suspense fallback={<div className="flex h-[calc(100vh-48px)] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+        <ReviewPageContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
 

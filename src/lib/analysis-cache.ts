@@ -1,63 +1,76 @@
-import type { GameAnalysis } from "./mock-data";
+"use client";
 
-const CACHE_KEY_PREFIX = "chess-analysis-";
+import type { GameAnalysis } from "./mock-data";
+import { getSupabaseBrowserClient } from "./supabase/client";
+import {
+  deleteAnalysesForGame,
+  getLatestAnalysis,
+  listAnalyzedGameIds,
+  saveAnalysis,
+} from "./repositories/analyses";
 
 /**
- * Get cached analysis for a game from localStorage.
+ * Backed by the `game_analyses` Supabase table since the localStorage
+ * cache was retired. Keeps the synchronous-looking name on each function
+ * but every call is async — call sites must `await` (or `.then`).
  */
-export function getCachedAnalysis(gameId: string): GameAnalysis | null {
+
+async function getClerkUserId(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const w = window as Window & {
+    Clerk?: { user?: { id?: string | null } | null };
+  };
+  return w.Clerk?.user?.id ?? null;
+}
+
+export async function getCachedAnalysis(
+  gameId: string
+): Promise<GameAnalysis | null> {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX + gameId);
-    if (!raw) return null;
-    return JSON.parse(raw) as GameAnalysis;
-  } catch {
+    const client = getSupabaseBrowserClient();
+    return await getLatestAnalysis(client, gameId);
+  } catch (err) {
+    console.error("[analysis-cache] getCachedAnalysis failed", err);
     return null;
   }
 }
 
-/**
- * Save analysis to localStorage.
- */
-export function saveCachedAnalysis(analysis: GameAnalysis): void {
+export async function saveCachedAnalysis(analysis: GameAnalysis): Promise<void> {
+  if (typeof window === "undefined") return;
+  const userId = await getClerkUserId();
+  if (!userId) return;
+  try {
+    const client = getSupabaseBrowserClient();
+    await saveAnalysis(client, analysis, userId);
+  } catch (err) {
+    console.error("[analysis-cache] saveCachedAnalysis failed", err);
+  }
+}
+
+export async function hasAnalysis(gameId: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const cached = await getCachedAnalysis(gameId);
+  return cached !== null;
+}
+
+export async function clearCachedAnalysis(gameId: string): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(
-      CACHE_KEY_PREFIX + analysis.gameId,
-      JSON.stringify(analysis)
-    );
-  } catch {
-    // localStorage full or unavailable — silently fail
+    const client = getSupabaseBrowserClient();
+    await deleteAnalysesForGame(client, gameId);
+  } catch (err) {
+    console.error("[analysis-cache] clearCachedAnalysis failed", err);
   }
 }
 
-/**
- * Check if a game has been analyzed.
- */
-export function hasAnalysis(gameId: string): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(CACHE_KEY_PREFIX + gameId) !== null;
-}
-
-/**
- * Remove cached analysis for a game from localStorage.
- */
-export function clearCachedAnalysis(gameId: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(CACHE_KEY_PREFIX + gameId);
-}
-
-/**
- * Get all cached game IDs.
- */
-export function getAnalyzedGameIds(): string[] {
+export async function getAnalyzedGameIds(): Promise<string[]> {
   if (typeof window === "undefined") return [];
-  const ids: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(CACHE_KEY_PREFIX)) {
-      ids.push(key.slice(CACHE_KEY_PREFIX.length));
-    }
+  try {
+    const client = getSupabaseBrowserClient();
+    return await listAnalyzedGameIds(client);
+  } catch (err) {
+    console.error("[analysis-cache] getAnalyzedGameIds failed", err);
+    return [];
   }
-  return ids;
 }
